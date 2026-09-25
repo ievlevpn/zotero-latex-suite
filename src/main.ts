@@ -272,7 +272,14 @@ function install() {
 	 * would otherwise leave them painted over the rendered result. Only while a
 	 * snippet is actually in flight; selectionchange fires constantly. */
 	const onSelectionChange = () => {
-		if (hasTabstops()) clearTabstopsIfElsewhere(currentBuffer(window)?.owner);
+		if (!hasTabstops()) return;
+		try {
+			clearTabstopsIfElsewhere(currentBuffer(window));
+		} catch {
+			// No way to tell where the caret is: end the snippet rather than leave
+			// its marks painted over the document.
+			clearTabstops();
+		}
 	};
 	window.document.addEventListener("selectionchange", onSelectionChange);
 

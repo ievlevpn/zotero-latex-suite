@@ -148,6 +148,48 @@ export async function run() {
 		assert.strictEqual(rendered(7), 0, "caret at the closing delimiter: stays source");
 	}
 
+	/* --- a snippet in a comment, from expansion to the caret leaving it ---
+	 *
+	 * The whole comment is one buffer, so nothing about the buffer changes when
+	 * the caret steps out of the equation. That is what left the placeholder
+	 * marks painted over the rendered result. */
+	{
+		const dom = new JSDOM(
+			`<body><div id="reader-ui"></div><div class="comment"><div class="content" contenteditable="true">see $x/</div></div></body>`);
+		const win = dom.window;
+		const el = win.document.querySelector(".content");
+		// jsdom does not implement it, and currentBuffer checks it.
+		Object.defineProperty(el, "isContentEditable", { value: true });
+		el.focus();
+		ls.setCaret(el, 7, 7);
+
+		const settings = ls.processSettings({
+			...ls.DEFAULT_SETTINGS,
+			snippets: `export default [{trigger: "/", replacement: "\\\\frac{$0}{$1}$2", options: "mA"}]`,
+			snippetVariables: "export default {}",
+		});
+		const automatic = settings.snippets.filter((s) => s.options.automatic);
+
+		assert.strictEqual(ls.runSnippets(win, { snippets: automatic, key: "/" }, settings, ls.currentBuffer(win)), true);
+		assert.strictEqual(ls.segmentsOf(el).text, "see $x/\\frac{}{}");
+		assert.deepStrictEqual(ls.selectionOffsets(el), { from: 13, to: 13 }, "the numerator is selected");
+		assert.strictEqual(ls.hasTabstops(), true);
+
+		// Typing into the empty placeholder has to grow it, not step out of it.
+		ls.currentBuffer(win).replaceRange(13, 13, "y");
+		assert.strictEqual(ls.segmentsOf(el).text, "see $x/\\frac{y}{}");
+		ls.clearTabstopsIfElsewhere(ls.currentBuffer(win));
+		assert.strictEqual(ls.hasTabstops(), true, "still filling in the numerator");
+		assert.strictEqual(ls.setSelectionToNextTabstop(ls.currentBuffer(win), false), true);
+		assert.deepStrictEqual(ls.selectionOffsets(el), { from: 16, to: 16 }, "Tab reaches the denominator");
+
+		// Out of the equation, into the prose before it — same buffer throughout.
+		ls.setCaret(el, 2, 2);
+		ls.clearTabstopsIfElsewhere(ls.currentBuffer(win));
+		assert.strictEqual(ls.hasTabstops(), false, "leaving math mode finishes the snippet");
+		ls.clearTabstops();
+	}
+
 	/* --- the popup's enlarge button --- */
 	{
 		// Zotero's markup: the popup div is React's, classes and inline transform included.

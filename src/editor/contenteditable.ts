@@ -220,10 +220,12 @@ function watchElement(element: HTMLElement, remap: (map: (range: Range) => Range
 		const delta = after.length - before.length;
 
 		// A tabstop's start holds still and its end follows the text, so typing
-		// into a placeholder grows it.
+		// into a placeholder grows it — including an empty one, where both ends
+		// sit exactly where the text is being inserted and only the bias tells
+		// them apart. Same rule as CodeMirror's `mapPos`.
 		const move = (offset: number, bias: -1 | 1) => {
-			if (offset <= prefix) return offset;
-			if (offset >= oldEnd) return offset + delta;
+			if (offset < prefix) return offset;
+			if (offset > oldEnd) return offset + delta;
 			return bias < 0 ? prefix : newEnd;
 		};
 		remap((range) => ({ from: move(range.from, -1), to: move(range.to, 1) }));

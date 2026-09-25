@@ -59,16 +59,18 @@ export function clearTabstops() {
 
 /** Drop just the innermost snippet, uncovering the one it was expanded inside. */
 function dropActive() {
-	if (active?.doc) {
+	const doc = active?.doc;
+	stack.pop();
+	active = stack[stack.length - 1] ?? null;
+	if (doc) {
 		try {
-			hideTabstopMarks(active.doc);
-			active.doc.removeEventListener("scroll", paintMarks, true);
+			hideTabstopMarks(doc);
+			// The snippet underneath still has marks to keep in place.
+			if (!active) doc.removeEventListener("scroll", paintMarks, true);
 		} catch {
 			/* the window may already be gone */
 		}
 	}
-	stack.pop();
-	active = stack[stack.length - 1] ?? null;
 	paintMarks();
 }
 
@@ -90,12 +92,46 @@ export function hasTabstops() {
 
 /**
  * The caret moved. Tabbing through a snippet only means anything while the
- * caret is still in the buffer it was expanded in, so leaving one — closing an
- * equation, clicking into the note around it, focusing something else entirely
+ * caret is still inside one of its tabstops, so moving out of them — closing an
+ * equation, clicking into the text around it, focusing something else entirely
  * — finishes that snippet and takes its marks down with it.
+ *
+ * Leaving the buffer is not enough on its own to notice this. In the note
+ * editor an equation is its own nested view, so stepping out of one changes the
+ * buffer; in an annotation comment the whole comment is one buffer and an
+ * equation is just `$…$` inside it, so the caret can walk out of a snippet
+ * without the buffer ever changing. Hence the position check, which covers both.
  */
-export function clearTabstopsIfElsewhere(owner: object | null | undefined) {
-	if (active && active.owner !== owner) clearTabstops();
+export function clearTabstopsIfElsewhere(buffer: Buffer | null | undefined) {
+	if (!active) return;
+	if (!buffer || buffer.owner !== active.owner) {
+		clearTabstops();
+		return;
+	}
+
+	const from = buffer.positionAt(buffer.from);
+	const to = buffer.positionAt(buffer.to);
+	const contains = (group: Range[]) => group.some((range) => from >= range.from && to <= range.to);
+
+	// Innermost first, the way Tab runs off the end of one: stepping out of a
+	// snippet expanded inside a placeholder hands the tabstops back to the outer
+	// one rather than costing you both.
+	while (active) {
+		// The tabstop in hand first: adjacent ones can collapse onto the same
+		// spot, and a caret sitting in both has not moved anywhere.
+		if (active.groups[active.index] && contains(active.groups[active.index])) return;
+
+		// Clicked back into a placeholder this snippet had already passed: carry
+		// on from there, the way Tab would have.
+		const index = active.groups.findIndex(contains);
+		if (index >= 0) {
+			active.index = index;
+			paintMarks();
+			return;
+		}
+
+		dropActive();
+	}
 }
 
 /** Replace `[from, to)` in `buffer` with a snippet result, then select tabstop 0. */

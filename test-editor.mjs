@@ -156,13 +156,61 @@ export function run() {
 		ls.runSnippets(winFor(view), { snippets: automatic(settings), key: "/" }, settings);
 		assert.strictEqual(ls.hasTabstops(), true, "a snippet with tabstops is in flight");
 
-		// The caret is still in the equation: nothing to finish.
-		ls.clearTabstopsIfElsewhere(ls.PMBuffer.forMath(view, "math_inline").owner);
-		assert.strictEqual(ls.hasTabstops(), true, "still in the same buffer");
+		// The caret is still in the numerator: nothing to finish.
+		ls.clearTabstopsIfElsewhere(ls.PMBuffer.forMath(view, "math_inline"));
+		assert.strictEqual(ls.hasTabstops(), true, "still in the tabstop it landed in");
 
 		// Out of it — the note around it, or nothing focused at all.
 		ls.clearTabstopsIfElsewhere(undefined);
 		assert.strictEqual(ls.hasTabstops(), false, "leaving the buffer drops the tabstops");
+	}
+
+	/* --- and so does the caret walking out of the snippet inside one buffer ---
+	 *
+	 * The reported bug: in an annotation comment the whole comment is one
+	 * buffer, so stepping out of the equation never changes the owner and the
+	 * marks stayed painted over the rendered result. */
+	{
+		const buffer = new StringBuffer("see $x/", 7);
+		const settings = settingsFor(`export default [{trigger: "/", replacement: "\\\\frac{$0}{$1}$2", options: "mA"}]`);
+		ls.expandSnippet(buffer, 6, 7, automatic(settings)[0].process({
+			effectiveLine: "see $x/", range: { from: 6, to: 7 }, sel: "", effectiveLineAfter: () => "", api: {},
+		}).replacement);
+		assert.strictEqual(buffer.text, "see $x\\frac{}{}");
+		assert.strictEqual(ls.hasTabstops(), true);
+
+		// Still in the numerator, same buffer: nothing to finish.
+		ls.clearTabstopsIfElsewhere(buffer);
+		assert.strictEqual(ls.hasTabstops(), true, "sitting in the tabstop it landed in");
+
+		// Typing into the empty placeholder has to keep it, not end the snippet.
+		buffer.applyChange(12, 12, "y");
+		ls.clearTabstopsIfElsewhere(buffer);
+		assert.strictEqual(ls.hasTabstops(), true, "typing into a placeholder stays inside it");
+
+		// Clicking back into the text before the equation is leaving the snippet,
+		// even though the buffer is the same one.
+		buffer.setSelection(2);
+		ls.clearTabstopsIfElsewhere(buffer);
+		assert.strictEqual(ls.hasTabstops(), false, "the caret left every tabstop");
+	}
+
+	/* --- clicking back into a placeholder resumes from there --- */
+	{
+		const buffer = new StringBuffer("/", 1);
+		const settings = settingsFor(`export default [{trigger: "/", replacement: "\\\\frac{$0}{$1}$2", options: "mA"}]`);
+		ls.expandSnippet(buffer, 0, 1, automatic(settings)[0].process({
+			effectiveLine: "/", range: { from: 0, to: 1 }, sel: "", effectiveLineAfter: () => "", api: {},
+		}).replacement);
+		assert.strictEqual(ls.setSelectionToNextTabstop(buffer, false), true, "Tab to the denominator");
+		assert.deepStrictEqual([buffer.from, buffer.to], [8, 8]);
+
+		buffer.setSelection(6); // back into the numerator with the mouse
+		ls.clearTabstopsIfElsewhere(buffer);
+		assert.strictEqual(ls.hasTabstops(), true, "an earlier placeholder is still this snippet");
+		assert.strictEqual(ls.setSelectionToNextTabstop(buffer, false), true);
+		assert.deepStrictEqual([buffer.from, buffer.to], [8, 8], "Tab picks up from there again");
+		ls.clearTabstops();
 	}
 
 	/* --- placeholders are selected, and typing into one keeps the later ones valid --- */
