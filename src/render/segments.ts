@@ -2,18 +2,21 @@
  * snippet engine.
  *
  * A comment is flat text, but its DOM is not: it may hold `<b>`/`<i>` runs,
- * `<br>` line breaks, and — once rendered — spans of MathML standing in for
- * `$…$`. A rendered equation counts as its *source* length, so the offsets here
+ * `<br>` line breaks, `<div>` lines (what Enter makes in Gecko), and — once
+ * rendered — spans of MathML standing in for `$…$`. A rendered equation counts as its *source* length, so the offsets here
  * always describe the comment as Zotero stores it, rendered or not.
  */
 export const SOURCE_ATTR = "data-latex-suite-source";
 
 export type Segment = {
-	kind: "text" | "br" | "math";
+	kind: "text" | "br" | "block" | "math";
 	start: number;
 	length: number;
 	node: Node;
 };
+
+/** Elements that start a line of their own, the way `innerText` reads them. */
+const BLOCKS = new Set(["DIV", "P"]);
 
 export function segmentsOf(root: Node): { segments: Segment[]; text: string } {
 	const segments: Segment[] = [];
@@ -43,6 +46,13 @@ export function segmentsOf(root: Node): { segments: Segment[]; text: string } {
 				segments.push({ kind: "math", start: text.length, length: source.length, node: element });
 				text += source;
 			} else {
+				// The line break is implied rather than a node, so it is anchored to
+				// the block. Not before the first line, nor after one that already
+				// ended in a <br>.
+				if (BLOCKS.has(element.nodeName) && text && !text.endsWith("\n")) {
+					segments.push({ kind: "block", start: text.length, length: 1, node: element });
+					text += "\n";
+				}
 				walk(element);
 			}
 		}
@@ -62,6 +72,13 @@ export function domPointAt(root: Element, segments: Segment[], target: number): 
 	for (const segment of segments) {
 		if (offset > segment.start + segment.length) continue;
 		if (segment.kind === "text") return { node: segment.node, offset: offset - segment.start };
+
+		// Past the implied break is the start of the block's own line.
+		if (segment.kind === "block") {
+			if (offset > segment.start) return { node: segment.node, offset: 0 };
+			const parent = segment.node.parentNode!;
+			return { node: parent, offset: Array.prototype.indexOf.call(parent.childNodes, segment.node) };
+		}
 
 		// A <br> or a rendered equation is one atom: the caret goes before it or
 		// after it, never inside. Snap to whichever side is nearer, so an offset

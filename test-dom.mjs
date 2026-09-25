@@ -27,6 +27,12 @@ export async function run() {
 		const withBreak = field("a<br>b").el;
 		assert.strictEqual(ls.segmentsOf(withBreak).text, "a\nb", "a <br> is one character");
 
+		// Enter in a Gecko contenteditable starts a <div>, not a <br>.
+		assert.strictEqual(ls.segmentsOf(field("foo<div>m</div>").el).text, "foo\nm", "a block starts a line");
+		assert.strictEqual(ls.segmentsOf(field("<div>foo</div><div>m</div>").el).text, "foo\nm");
+		assert.strictEqual(ls.segmentsOf(field("<div>foo</div>").el).text, "foo", "not before the first line");
+		assert.strictEqual(ls.segmentsOf(field("a<br><div>b</div>").el).text, "a\nb", "one break, not two");
+
 		const withMarkup = field("a<b>bc</b>d").el;
 		assert.strictEqual(ls.segmentsOf(withMarkup).text, "abcd", "markup is transparent to the text model");
 	}
@@ -51,6 +57,38 @@ export async function run() {
 				`offset ${offset} maps as expected`,
 			);
 		}
+	}
+
+	/* --- offsets round-trip across lines made by Enter --- */
+	{
+		const { el } = field("<div>foo</div><div>bar</div>");
+		const { segments, text } = ls.segmentsOf(el);
+		assert.strictEqual(text, "foo\nbar");
+		for (let offset = 0; offset <= text.length; offset++) {
+			const point = ls.domPointAt(el, segments, offset);
+			assert.strictEqual(ls.offsetOfPoint(el, point.node, point.offset), offset, `offset ${offset} round-trips`);
+		}
+	}
+
+	/* --- a snippet at the start of such a line keeps the line --- */
+	{
+		const dom = new JSDOM(
+			`<body><div id="reader-ui"></div><div class="comment"><div class="content" contenteditable="true">foo<div>m</div></div></div></body>`);
+		const win = dom.window;
+		const el = win.document.querySelector(".content");
+		Object.defineProperty(el, "isContentEditable", { value: true });
+		el.focus();
+		ls.setCaret(el, 5, 5);
+
+		const settings = ls.processSettings({
+			...ls.DEFAULT_SETTINGS,
+			snippets: `export default [{trigger: "m", replacement: "$$0$", options: "t"}]`,
+			snippetVariables: "export default {}",
+		});
+		assert.strictEqual(ls.runSnippets(win, { snippets: settings.snippets }, settings, ls.currentBuffer(win)), true);
+		assert.strictEqual(ls.segmentsOf(el).text, "foo\n$$", "the line break survives the expansion");
+		assert.deepStrictEqual(ls.selectionOffsets(el), { from: 5, to: 5 }, "caret between the dollars");
+		ls.clearTabstops();
 	}
 
 	/* --- rendering, and putting it back exactly --- */
