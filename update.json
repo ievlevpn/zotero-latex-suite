@@ -3,8 +3,8 @@
     "latex-suite@ievlevpn.github.io": {
       "updates": [
         {
-          "version": "0.5.3",
-          "update_link": "https://github.com/ievlevpn/zotero-latex-suite/releases/download/v0.5.3/latex-suite.xpi",
+          "version": "0.5.4",
+          "update_link": "https://github.com/ievlevpn/zotero-latex-suite/releases/download/v0.5.4/latex-suite.xpi",
           "applications": {
             "zotero": {
               "strict_min_version": "6.999",

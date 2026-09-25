@@ -1,7 +1,7 @@
 {
 	"manifest_version": 2,
 	"name": "LaTeX Suite",
-	"version": "0.5.3",
+	"version": "0.5.4",
 	"description": "Renders LaTeX in PDF annotation comments as you write, and adds Obsidian Latex Suite's snippets to Zotero's notes and annotations.",
 	"homepage_url": "https://github.com/ievlevpn/zotero-latex-suite",
 	"author": "Pavel Ievlev",
