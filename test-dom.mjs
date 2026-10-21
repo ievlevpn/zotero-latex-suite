@@ -386,7 +386,19 @@ export async function run() {
 		textarea.blur();
 		assert.strictEqual(editing(), false, "back once the box loses focus");
 
+		// Removed while focused — the page re-rendered, say. No focusout fires,
+		// and every popup after it must still show.
 		textarea.focus();
+		assert.strictEqual(editing(), true);
+		textarea.remove();
+		win.document.body.insertAdjacentHTML("beforeend", `<div class="view-popup annotation-popup"></div>`);
+		await tick();
+		assert.strictEqual(editing(), false, "a box that is gone is not being edited");
+
+		const again = inner.createElement("textarea");
+		again.className = "textAnnotation";
+		inner.querySelector(".customAnnotationLayer").append(again);
+		again.focus();
 		stop();
 		assert.strictEqual(editing(), false, "uninstall never leaves it hidden");
 		assert.strictEqual(win.document.getElementById("latex-suite-text-popup"), null);
