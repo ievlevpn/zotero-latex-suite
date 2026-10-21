@@ -93,6 +93,11 @@ function build(doc: Document, text: string, bounds: MathBounds, katex: Katex): E
 	return span;
 }
 
+/** One equation of `text`, rendered — a fresh node, safe to insert anywhere. */
+export function renderEquation(doc: Document, text: string, bounds: MathBounds, katex: Katex): Element {
+	return build(doc, text, bounds, katex);
+}
+
 /**
  * Render the equations in `root`, in place, leaving surrounding markup alone.
  *

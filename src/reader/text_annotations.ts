@@ -1,5 +1,5 @@
-/* Live rendering of `$…$` in text annotations — the boxes "Add Text" puts on
- * the page.
+/* Live rendering of `$…$`, `**bold**` and `*italic*` in text annotations —
+ * the boxes "Add Text" puts on the page. See render/inline.ts for the markup.
  *
  * A comment field can hold rendered math in place of its source; a textarea
  * cannot. So the source stays in the textarea, untouched, and a mirror laid
@@ -17,9 +17,9 @@
  * is usually narrower and sometimes taller, will not fill it exactly. The
  * mirror lets taller math overflow rather than clip it.
  */
-import { renderMath } from "src/render/math";
+import { buildInline, hasInlineMarkup, parseInline } from "src/render/inline";
+import { renderEquation } from "src/render/math";
 import { placeMirror, TEXT_ANNOTATION } from "src/render/textarea_mirror";
-import { renderableEquations } from "src/utils/math_bounds";
 
 type Katex = { render(tex: string, element: Element, options: object): void };
 
@@ -83,14 +83,18 @@ export function installTextAnnotationRendering(doc: Document, katex: Katex): () 
 	/** Bring one textarea's mirror up to date; returns the mirror, if it should have one. */
 	function sync(textarea: HTMLTextAreaElement, focused = textarea === doc.activeElement): HTMLElement | null {
 		const value = textarea.value;
-		const layer = !focused && textarea.isConnected && renderableEquations(value).length ? layerFor(textarea) : null;
+		let mirror = mirrors.get(textarea);
+		// Parsing is only needed when what the mirror shows is out of date.
+		const current = mirror !== undefined && shown.get(mirror) === value;
+		const nodes = focused || !textarea.isConnected || current ? null : parseInline(value);
+		const wanted = !focused && textarea.isConnected && (current || hasInlineMarkup(nodes!));
+		const layer = wanted ? layerFor(textarea) : null;
 		if (!layer) {
 			unrender(textarea);
 			return null;
 		}
 
 		ensureStyle();
-		let mirror = mirrors.get(textarea);
 		if (!mirror) {
 			mirror = doc.createElement("div");
 			// The textarea already says all of this to a screen reader.
@@ -98,9 +102,8 @@ export function installTextAnnotationRendering(doc: Document, katex: Katex): () 
 			mirrors.set(textarea, mirror);
 		}
 		placeMirror(mirror, textarea);
-		if (shown.get(mirror) !== value) {
-			mirror.textContent = value;
-			renderMath(mirror, katex);
+		if (nodes) {
+			mirror.replaceChildren(buildInline(doc, nodes, (bounds) => renderEquation(doc, value, bounds, katex)));
 			shown.set(mirror, value);
 		}
 		if (mirror.parentNode !== layer) layer.append(mirror);

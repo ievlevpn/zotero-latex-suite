@@ -80,6 +80,11 @@ narrower, may leave room on the right, and a tall display equation can run past
 the bottom edge. A PDF exported with annotations carries the source text, since
 that is what the annotation holds.
 
+Zotero keeps a text annotation as plain text, with no bold or italic, so those
+are written the markdown way — `**bold**` and `*italic*` — and drawn as such on
+the page. Asterisks only; a `*` with a space on both sides, or inside an
+equation, stays a star, and `\*` is always one.
+
 Rendering is via KaTeX's MathML output, which Firefox draws natively, so the
 plugin ships no fonts. Inline `$…$` has to look like an equation and not like
 "$5 and $10", so a dollar pair with a space just inside it is left alone.

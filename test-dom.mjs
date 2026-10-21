@@ -267,6 +267,32 @@ export async function run() {
 		assert.strictEqual(ls.currentBuffer(win), null, "a read-only annotation is left alone");
 	}
 
+	/* --- markdown emphasis in text annotations --- */
+	{
+		// Flattened to a string so the cases read at a glance: <b>, <i>, [math].
+		const show = (nodes, text) => nodes.map((node) => {
+			if (node.type === "text") return node.text;
+			if (node.type === "math") return `[${text.slice(node.bounds.outer_start, node.bounds.outer_end)}]`;
+			const tag = node.type === "strong" ? "b" : "i";
+			return `<${tag}>${show(node.children, text)}</${tag}>`;
+		}).join("");
+		const md = (text) => show(ls.parseInline(text), text);
+
+		assert.strictEqual(md("**bold** and *it*"), "<b>bold</b> and <i>it</i>");
+		assert.strictEqual(md("2 * 3 * 4"), "2 * 3 * 4", "a star with space on both sides is a star");
+		assert.strictEqual(md("a*b*c"), "a<i>b</i>c", "intraword, as in CommonMark");
+		assert.strictEqual(md("**the bound $x$ holds**"), "<b>the bound [$x$] holds</b>", "emphasis wraps an equation");
+		assert.strictEqual(md("$a*b*c$ and $x^**$"), "[$a*b*c$] and [$x^**$]", "stars in math are math");
+		assert.strictEqual(md("*a **b** c*"), "<i>a <b>b</b> c</i>");
+		assert.strictEqual(md("***both***"), "<i><b>both</b></i>");
+		assert.strictEqual(md("**x*"), "*<i>x</i>", "spare stars stay as typed");
+		assert.strictEqual(md("\\*not\\* *yes*"), "*not* <i>yes</i>", "an escaped star is literal");
+		assert.strictEqual(md("*open\n\nclosed*"), "*open\n\nclosed*", "a blank line ends emphasis");
+		assert.strictEqual(md("*two\nlines*"), "<i>two\nlines</i>", "a single line break does not");
+		assert.strictEqual(md("**unclosed"), "**unclosed");
+		assert.strictEqual(md("$5 and $10 * 2"), "$5 and $10 * 2");
+	}
+
 	{
 		const katexCalls = [];
 		const countingKatex = { render: (tex, element) => { katexCalls.push(tex); element.textContent = `«${tex}»`; } };
@@ -306,6 +332,11 @@ export async function run() {
 		a.setAttribute("data-comment", "now $z$");
 		await tick();
 		assert.strictEqual(mirrors()[0].textContent, "now «z»");
+
+		a.value = "a **bold** word";
+		a.setAttribute("data-comment", "a **bold** word");
+		await tick();
+		assert.strictEqual(mirrors()[0].innerHTML, "a <b>bold</b> word", "emphasis alone is enough to render");
 
 		a.remove();
 		await tick();
