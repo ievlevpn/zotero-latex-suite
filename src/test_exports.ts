@@ -17,3 +17,6 @@ export { runAutoFraction } from "./features/autofraction";
 export { renderMath, unrenderMath, syncRender, isRendered } from "./render/math";
 export { segmentsOf, domPointAt, offsetOfPoint, selectionOffsets, setCaret } from "./render/segments";
 export { installPopupEnlarge } from "./reader/popup_enlarge";
+export { TextareaBuffer } from "./editor/textarea";
+export { installTextAnnotationRendering } from "./reader/text_annotations";
+export { trackViewDocuments } from "./reader/views";

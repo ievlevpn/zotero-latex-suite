@@ -19,6 +19,8 @@
 import { clearRenderState, isRendered, syncRender, unrenderMath } from "src/render/math";
 import { segmentsOf, selectionOffsets, setCaret, SOURCE_ATTR } from "src/render/segments";
 import { COMMENT_FIELD } from "src/editor/contenteditable";
+import { installTextAnnotationRendering } from "./text_annotations";
+import { trackViewDocuments } from "./views";
 
 /** Long enough for a burst of React updates to settle, short enough not to be felt. */
 const SETTLE_MS = 100;
@@ -216,7 +218,11 @@ export function installAnnotationRendering(win: any): (() => void) | null {
 	observer.observe(doc.body, { childList: true, subtree: true, characterData: true });
 	schedule(0, true);
 
+	// Text annotations live on the page, in the PDF view's own document.
+	const stopTextAnnotations = trackViewDocuments(win, (view) => installTextAnnotationRendering(view, katex));
+
 	return () => {
+		stopTextAnnotations();
 		observer.disconnect();
 		win.clearTimeout(timer);
 		timer = 0;

@@ -17,6 +17,8 @@ import { Snippet } from "./snippets/snippets";
 import { Context } from "./utils/context";
 import { installAnnotationRendering } from "./reader/annotations";
 import { installPopupEnlarge } from "./reader/popup_enlarge";
+import { trackViewDocuments } from "./reader/views";
+import { TEXT_ANNOTATION } from "./render/textarea_mirror";
 
 declare const window: any;
 
@@ -262,11 +264,6 @@ function install() {
 		}
 	};
 
-	// Capture phase on the document: ProseMirror listens on its own editable
-	// element, so this runs first for both the note and any nested equation.
-	window.document.addEventListener("keydown", onKeydown, true);
-	window.document.addEventListener("beforeinput", onBeforeInput, true);
-
 	/* Marks are drawn over the text, so nothing takes them down on its own when
 	 * the caret leaves the snippet — clicking out of an equation, or closing it,
 	 * would otherwise leave them painted over the rendered result. Only while a
@@ -281,7 +278,29 @@ function install() {
 			clearTabstops();
 		}
 	};
-	window.document.addEventListener("selectionchange", onSelectionChange);
+
+	// Capture phase on the document: ProseMirror listens on its own editable
+	// element, so this runs first for both the note and any nested equation.
+	const listen = (doc: Document, keydown = onKeydown) => {
+		doc.addEventListener("keydown", keydown, true);
+		doc.addEventListener("beforeinput", onBeforeInput, true);
+		doc.addEventListener("selectionchange", onSelectionChange);
+		return () => {
+			doc.removeEventListener("keydown", keydown, true);
+			doc.removeEventListener("beforeinput", onBeforeInput, true);
+			doc.removeEventListener("selectionchange", onSelectionChange);
+		};
+	};
+	const stopListening = listen(window.document);
+	// Text annotations are edited in the PDF view's own document, whose events
+	// never reach this one; the PDF view's own keydown handler steps aside for
+	// them. Every other key there is the PDF view's, and stays out of the trace.
+	const onViewKeydown = (event: KeyboardEvent) => {
+		if ((event.target as Element)?.matches?.(TEXT_ANNOTATION)) onKeydown(event);
+	};
+	const stopListeningToViews = isReaderWindow(window)
+		? trackViewDocuments(window, (doc) => listen(doc, onViewKeydown))
+		: null;
 
 	// The caret in each comment, so a stolen keystroke can be put back.
 	const stopTracking = isReaderWindow(window) ? trackCommentSelection(window) : null;
@@ -291,9 +310,8 @@ function install() {
 	window.__latexSuiteUninstall = () => {
 		stopTracking?.();
 		stopPopupEnlarge?.();
-		window.document.removeEventListener("keydown", onKeydown, true);
-		window.document.removeEventListener("beforeinput", onBeforeInput, true);
-		window.document.removeEventListener("selectionchange", onSelectionChange);
+		stopListening();
+		stopListeningToViews?.();
 		clearTabstops();
 		stopRendering?.();
 		stopRendering = null;

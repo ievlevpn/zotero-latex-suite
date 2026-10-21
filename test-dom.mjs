@@ -225,5 +225,121 @@ export async function run() {
 		assert.strictEqual(doc.getElementById("latex-suite-popup-enlarge"), null, "and its stylesheet");
 	}
 
+	/* --- text annotations: a textarea in the PDF view's own iframe --- */
+	const pdfView = (textareas) => {
+		const dom = new JSDOM(`<body><div id="reader-ui"></div><iframe></iframe></body>`);
+		const inner = dom.window.document.querySelector("iframe").contentDocument;
+		// Zotero's markup (src/pdf/page.js): the textarea sits in a layer in the page div.
+		inner.body.innerHTML = `<div class="page"><div class="customAnnotationLayer">${textareas}</div></div>`;
+		return { win: dom.window, inner, dom };
+	};
+	const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+	{
+		const { win, inner } = pdfView(`<textarea class="textAnnotation" data-id="A">see $x/</textarea>`);
+		const textarea = inner.querySelector("textarea");
+		let saved = 0;
+		textarea.addEventListener("input", () => saved++);
+		textarea.focus();
+		textarea.setSelectionRange(7, 7);
+
+		const buffer = ls.currentBuffer(win);
+		assert.ok(buffer instanceof ls.TextareaBuffer, "focus one frame down is found from the reader window");
+		assert.strictEqual(buffer.kind, "math_inline");
+
+		const settings = ls.processSettings({
+			...ls.DEFAULT_SETTINGS,
+			snippets: `export default [{trigger: "/", replacement: "\\\\frac{$0}{$1}$2", options: "mA"}]`,
+			snippetVariables: "export default {}",
+		});
+		const automatic = settings.snippets.filter((s) => s.options.automatic);
+		assert.strictEqual(ls.runSnippets(win, { snippets: automatic, key: "/" }, settings, buffer), true);
+		assert.strictEqual(textarea.value, "see $x/\\frac{}{}");
+		assert.deepStrictEqual([textarea.selectionStart, textarea.selectionEnd], [13, 13], "the numerator is selected");
+		assert.ok(saved > 0, "the reader hears about the edit, so it saves it");
+
+		ls.currentBuffer(win).replaceRange(13, 13, "y");
+		assert.strictEqual(ls.setSelectionToNextTabstop(ls.currentBuffer(win), false), true);
+		assert.deepStrictEqual([textarea.selectionStart, textarea.selectionEnd], [16, 16], "Tab reaches the denominator");
+		ls.clearTabstops();
+
+		textarea.disabled = true;
+		assert.strictEqual(ls.currentBuffer(win), null, "a read-only annotation is left alone");
+	}
+
+	{
+		const katexCalls = [];
+		const countingKatex = { render: (tex, element) => { katexCalls.push(tex); element.textContent = `«${tex}»`; } };
+		const { inner } = pdfView(
+			`<textarea class="textAnnotation" data-id="A" style="left: 10px">see $x$ and $y$</textarea>` +
+			`<textarea class="textAnnotation" data-id="B">no math, $5 and $10</textarea>`);
+		const [a, b] = inner.querySelectorAll("textarea");
+		const stop = ls.installTextAnnotationRendering(inner, countingKatex);
+		const mirrors = () => Array.from(inner.querySelectorAll(".latex-suite-text-layer > *"));
+
+		assert.strictEqual(mirrors().length, 1, "only the annotation with an equation gets a mirror");
+		const [mirror] = mirrors();
+		assert.strictEqual(mirror.textContent, "see «x» and «y»");
+		assert.strictEqual(mirror.parentNode.parentNode, inner.querySelector(".page"), "beside the reader's layer, not in it");
+		assert.ok(mirror.getAttribute("style").endsWith("left: 10px"), "placed by the textarea's own style");
+		assert.ok(a.classList.contains("latex-suite-text-hidden"), "the source underneath is hidden");
+		assert.strictEqual(a.value, "see $x$ and $y$", "the textarea itself is never touched");
+		assert.strictEqual(b.classList.contains("latex-suite-text-hidden"), false);
+
+		a.focus();
+		assert.strictEqual(mirrors().length, 0, "editing shows the source");
+		assert.strictEqual(a.classList.contains("latex-suite-text-hidden"), false);
+		a.blur();
+		assert.strictEqual(mirrors()[0]?.textContent, "see «x» and «y»", "leaving renders again");
+
+		// The reader moves a box by rewriting its style; the mirror follows.
+		a.setAttribute("style", "left: 20px");
+		await tick();
+		assert.ok(mirrors()[0].getAttribute("style").endsWith("left: 20px"));
+		const calls = katexCalls.length;
+		a.setAttribute("style", "left: 30px");
+		await tick();
+		assert.strictEqual(katexCalls.length, calls, "moving a box does not re-render it");
+
+		// An edit from elsewhere (the sidebar) arrives as a new value and data-comment.
+		a.value = "now $z$";
+		a.setAttribute("data-comment", "now $z$");
+		await tick();
+		assert.strictEqual(mirrors()[0].textContent, "now «z»");
+
+		a.remove();
+		await tick();
+		assert.strictEqual(mirrors().length, 0, "a deleted annotation takes its mirror with it");
+
+		inner.querySelector(".customAnnotationLayer").insertAdjacentHTML("beforeend",
+			`<textarea class="textAnnotation" data-id="C">new $w$</textarea>`);
+		await tick();
+		assert.strictEqual(mirrors()[0]?.textContent, "new «w»", "a new annotation is picked up");
+
+		stop();
+		assert.strictEqual(inner.querySelectorAll(".latex-suite-text-layer").length, 0, "uninstall removes the mirrors");
+		assert.strictEqual(inner.querySelectorAll(".latex-suite-text-hidden").length, 0, "and shows the source again");
+		assert.strictEqual(inner.getElementById("latex-suite-text-annotations"), null, "and its stylesheet");
+	}
+
+	{
+		const { win, dom } = pdfView("");
+		const seen = [];
+		const stop = ls.trackViewDocuments(win, (doc) => {
+			seen.push(doc);
+			return () => seen.splice(seen.indexOf(doc), 1);
+		});
+		assert.strictEqual(seen.length, 1, "a view already open is attached");
+
+		const second = dom.window.document.createElement("iframe");
+		dom.window.document.body.append(second); // split view
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		assert.strictEqual(seen.length, 2, "a view opened later is attached when it loads");
+		assert.ok(seen.includes(second.contentDocument));
+
+		stop();
+		assert.strictEqual(seen.length, 0, "uninstall detaches every view");
+	}
+
 	console.log("dom-layer tests passed");
 }

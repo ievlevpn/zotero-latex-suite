@@ -12,6 +12,7 @@
 import { Buffer, BufferKind, Range } from "./buffer";
 import { MathBounds, mathBoundsAt } from "src/utils/math_bounds";
 import { domPointAt, segmentsOf, selectionOffsets, setCaret } from "src/render/segments";
+import { watchText } from "./watch_text";
 
 /**
  * The comment field, in both the sidebar and the in-page popup — those are two
@@ -166,7 +167,7 @@ export class TextBuffer implements Buffer {
 	}
 
 	watch(remap: (map: (range: Range) => Range) => void) {
-		watchElement(this.element, remap);
+		watchText(this.element, () => segmentsOf(this.element).text, remap);
 	}
 
 	get document(): Document {
@@ -186,50 +187,6 @@ export class TextBuffer implements Buffer {
 			return [];
 		}
 	}
-}
-
-/* Tabstops here are plain text offsets, so they are kept valid by diffing the
- * text on every input: one changed span between a common prefix and suffix,
- * which is what a keystroke produces. */
-const watched = new WeakMap<HTMLElement, string>();
-
-function watchElement(element: HTMLElement, remap: (map: (range: Range) => Range) => void) {
-	if (watched.has(element)) {
-		watched.set(element, segmentsOf(element).text);
-		return;
-	}
-	watched.set(element, segmentsOf(element).text);
-
-	element.addEventListener("input", () => {
-		const before = watched.get(element) ?? "";
-		const after = segmentsOf(element).text;
-		watched.set(element, after);
-		if (before === after) return;
-
-		let prefix = 0;
-		while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix++;
-		let suffix = 0;
-		while (
-			suffix < before.length - prefix &&
-			suffix < after.length - prefix &&
-			before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
-		) suffix++;
-
-		const oldEnd = before.length - suffix;
-		const newEnd = after.length - suffix;
-		const delta = after.length - before.length;
-
-		// A tabstop's start holds still and its end follows the text, so typing
-		// into a placeholder grows it — including an empty one, where both ends
-		// sit exactly where the text is being inserted and only the bias tells
-		// them apart. Same rule as CodeMirror's `mapPos`.
-		const move = (offset: number, bias: -1 | 1) => {
-			if (offset < prefix) return offset;
-			if (offset > oldEnd) return offset + delta;
-			return bias < 0 ? prefix : newEnd;
-		};
-		remap((range) => ({ from: move(range.from, -1), to: move(range.to, 1) }));
-	});
 }
 
 /* Where the caret was in each comment field.

@@ -4,7 +4,7 @@
 renders equations in notes but not in annotation comments, where most reading
 notes actually get written — so a comment reading `the bound $\|x\|_2 \leq 1$
 holds` stays as raw source. This plugin renders it, live, in the reader sidebar,
-the in-page popups, and the item pane.
+the in-page popups, the item pane, and the text boxes drawn on the page.
 
 It also brings the snippets from
 [Obsidian Latex Suite](https://github.com/artisticat1/obsidian-latex-suite) to
@@ -69,6 +69,16 @@ comment back out of its own DOM on every keystroke, so the rendering has to come
 out of the way first; it goes back in during the same event, before the browser
 paints, and from a cache keyed on the LaTeX source — so an equation only goes
 through KaTeX again when its source actually changes.
+
+**Text annotations** — the boxes the reader's *Add Text* tool puts on the page —
+get the same treatment: snippets while you type in one, and its `$…$` rendered
+on the page once you click away. A text box is a plain textarea, which cannot
+hold rendered math, so while you are editing one it shows all of its source;
+the rendering is laid over it, and the annotation itself is never touched.
+Zotero sizes the box to fit the source, so rendered math, which is usually
+narrower, may leave room on the right, and a tall display equation can run past
+the bottom edge. A PDF exported with annotations carries the source text, since
+that is what the annotation holds.
 
 Rendering is via KaTeX's MathML output, which Firefox draws natively, so the
 plugin ships no fonts. Inline `$…$` has to look like an equation and not like

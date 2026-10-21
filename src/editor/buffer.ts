@@ -1,10 +1,11 @@
 /* The one thing the snippet engine needs from an editor: a flat string, a
  * cursor in it, and a way to replace a range and land the cursor somewhere.
  *
- * Two editors provide it. Zotero notes are ProseMirror, where an equation is a
- * node edited in a nested view (editor/pm.ts). Annotation comments in the
+ * Three editors provide it. Zotero notes are ProseMirror, where an equation is
+ * a node edited in a nested view (editor/pm.ts). Annotation comments in the
  * reader are a plain contenteditable holding plain text, where an equation is
- * `$…$` the way it is in markdown (editor/contenteditable.ts).
+ * `$…$` the way it is in markdown (editor/contenteditable.ts); text
+ * annotations on the page are textareas, with `$…$` likewise (editor/textarea.ts).
  */
 import { MathBounds } from "src/utils/math_bounds";
 

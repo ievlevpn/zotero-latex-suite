@@ -4,3 +4,4 @@ node_modules/
 misc/
 build/
 vendor/
+.playwright-mcp/
