@@ -21,3 +21,4 @@ export { TextareaBuffer } from "./editor/textarea";
 export { installTextAnnotationRendering } from "./reader/text_annotations";
 export { trackViewDocuments } from "./reader/views";
 export { parseInline } from "./render/inline";
+export { installTextPopupHiding } from "./reader/text_popup";

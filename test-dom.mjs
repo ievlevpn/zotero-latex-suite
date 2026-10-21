@@ -372,5 +372,25 @@ export async function run() {
 		assert.strictEqual(seen.length, 0, "uninstall detaches every view");
 	}
 
+	/* --- the popup steps aside while a text box is typed into --- */
+	{
+		const { win, inner } = pdfView(`<textarea class="textAnnotation" data-id="A">abc</textarea>`);
+		const root = win.document.documentElement;
+		const stop = ls.installTextPopupHiding(win);
+		const textarea = inner.querySelector("textarea");
+		const editing = () => root.hasAttribute("data-latex-suite-text-editing");
+
+		assert.strictEqual(editing(), false);
+		textarea.focus();
+		assert.strictEqual(editing(), true, "hidden while editing");
+		textarea.blur();
+		assert.strictEqual(editing(), false, "back once the box loses focus");
+
+		textarea.focus();
+		stop();
+		assert.strictEqual(editing(), false, "uninstall never leaves it hidden");
+		assert.strictEqual(win.document.getElementById("latex-suite-text-popup"), null);
+	}
+
 	console.log("dom-layer tests passed");
 }
