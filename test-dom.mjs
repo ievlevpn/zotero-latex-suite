@@ -213,6 +213,42 @@ export async function run() {
 		button.click();
 		assert.strictEqual(popup.hasAttribute("data-latex-suite-big"), false, "click again restores");
 
+		// Enlarged, the header moves the popup and the corner grip sizes it.
+		const mouse = (el, type, x, y) => el.dispatchEvent(new dom.window.MouseEvent(type, {
+			bubbles: true, button: 0, clientX: x, clientY: y,
+		}));
+		const css = (name) => popup.style.getPropertyValue(name);
+		const header = popup.querySelector("header");
+		const grip = popup.querySelector(":scope > .latex-suite-resize");
+		assert.ok(grip, "an enlarged popup gets a resize grip");
+
+		button.click();
+		mouse(header, "mousedown", 100, 100);
+		mouse(doc, "mousemove", 130, 140);
+		mouse(doc, "mouseup", 130, 140);
+		assert.strictEqual(css("--latex-suite-dx"), "30px", "dragging the header moves the popup");
+		assert.strictEqual(css("--latex-suite-dy"), "40px");
+		assert.strictEqual(popup.hasAttribute("data-latex-suite-busy"), false, "the gesture ends with the button");
+
+		// Dragging the header's buttons would be dragging the popup by its controls.
+		mouse(popup.querySelector(".more"), "mousedown", 100, 100);
+		mouse(doc, "mousemove", 200, 200);
+		mouse(doc, "mouseup", 200, 200);
+		assert.strictEqual(css("--latex-suite-dx"), "30px", "the header's own controls are not a handle");
+
+		// No layout in jsdom, so the grip starts from the sizes the stylesheet defaults to.
+		mouse(grip, "mousedown", 0, 0);
+		mouse(doc, "mousemove", 100, 50);
+		mouse(doc, "mouseup", 100, 50);
+		assert.strictEqual(css("--latex-suite-w"), "820px", "the grip widens the popup");
+		assert.strictEqual(css("--latex-suite-h"), "370px", "and deepens the comment field");
+		assert.strictEqual(css("--latex-suite-dx"), "80px", "growing about the centre keeps the top-left corner still");
+		assert.strictEqual(css("--latex-suite-dy"), "65px");
+
+		button.click();
+		assert.strictEqual(css("--latex-suite-w"), "", "restoring hands the position and size back to Zotero");
+		assert.strictEqual(css("--latex-suite-dx"), "");
+
 		// A popup opened later — the usual case — gets one too, and only one.
 		doc.body.insertAdjacentHTML("beforeend", popupHTML);
 		await new Promise((resolve) => setTimeout(resolve, 0));
